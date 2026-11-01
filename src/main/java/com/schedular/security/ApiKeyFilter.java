@@ -31,6 +31,10 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        // 回调端点以 X-Callback-Token 为凭证，不走 X-API-Key 过滤器
+        if (request.getRequestURI().matches("/api/agent-executions/[^/]+/result")) {
+            return true;
+        }
         return !request.getRequestURI().startsWith("/api/");
     }
 

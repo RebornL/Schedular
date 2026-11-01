@@ -88,7 +88,7 @@ public class ExecutionService {
         }
         switch (outcome.type()) {
             case ACK -> log.info("受理回执有效，等待回调: execution_id={}", execution.executionId());
-            case RESULT -> handleResult(execution, task, outcome.result());
+            case RESULT -> handleAgentResult(execution, task, outcome.result());
             case TIMEOUT -> finalizeTerminal(execution, task, Execution.STATUS_TIMEOUT,
                     null, "执行超时: " + outcome.error());
             case LINK_FAILURE -> {
@@ -98,8 +98,8 @@ public class ExecutionService {
         }
     }
 
-    /** 2xx + AgentExecutionResult：业务 SUCCEEDED/FAILED 均为终态，FAILED 不重试。 */
-    private void handleResult(Execution execution, Task task, AgentExecutionResult result) {
+    /** 2xx + AgentExecutionResult（sync 响应与 EVENT_CALLBACK 回调共用）：业务 SUCCEEDED/FAILED 均为终态，FAILED 不重试。 */
+    public void handleAgentResult(Execution execution, Task task, AgentExecutionResult result) {
         String status = "SUCCEEDED".equals(result.status())
                 ? Execution.STATUS_SUCCEEDED : Execution.STATUS_FAILED;
         String resultJson;
