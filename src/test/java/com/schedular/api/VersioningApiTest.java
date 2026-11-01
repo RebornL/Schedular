@@ -27,7 +27,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -64,7 +63,7 @@ class VersioningApiTest {
     static class StubAgentController {
 
         @PostMapping("/stub/agent/versioning")
-        ResponseEntity<String> handle(@PathVariable String scenario, @RequestBody String body)
+        ResponseEntity<String> handle(@RequestBody String body)
                 throws Exception {
             String execId = new ObjectMapper().readTree(body).path("execution_id").asText();
             return ResponseEntity.ok(new ObjectMapper().writeValueAsString(Map.of(
