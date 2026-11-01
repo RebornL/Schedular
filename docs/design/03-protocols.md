@@ -8,7 +8,7 @@
 
 - `task.name` 必填；`task.task_type` 当前仅 `AGENT_SCHEDULED_EXECUTION`。
 - `target.agent_id` 必填，必须存在于 agents 且 enabled=1；`trigger_type` 当前仅 `HTTP_API`。
-- `schedule.type` 当前仅 `CRON`；`expression` 必须是合法 Quartz 7 段 cron（用 Quartz CronExpression 解析校验）；`timezone` 必须 IANA 合法；`start_at`/`end_at` 可空、给出时为 ISO-8601。
+- `schedule.type` 当前仅 `CRON`；`expression` 必须是合法 Quartz cron（CronExpression 解析校验，6-7 段均可——秒域必须，年域可选，故 `*/1 * * * * ?` 与 `0 0 * * * ?` 都合法）；`timezone` 必须 IANA 合法；`start_at`/`end_at` 可空、给出时为 ISO-8601。
 - `execution.instruction` 必填；`parameters`、`context_refs` 可空对象/数组。
 - `security.tenant_id` / `owner_user_id`：**仅作声明**，服务端以认证身份覆盖校验（见 05），不一致返回 403 `TENANT_MISMATCH`。
 - `execution_policy.timeout_seconds` ≥ 1；`retry_count` ≥ 0；`max_concurrent_executions` ≥ 1。
