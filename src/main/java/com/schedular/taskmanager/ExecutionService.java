@@ -2,6 +2,7 @@ package com.schedular.taskmanager;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.schedular.common.Ids;
 import com.schedular.events.EventService;
 import com.schedular.scheduler.EscalationProperties;
 import com.schedular.scheduler.RetryScheduler;
@@ -19,6 +20,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -64,7 +66,7 @@ public class ExecutionService {
 
     /** Quartz 到点入口：建 Execution 行并立即触发；任何链路异常只记录，不上抛。 */
     public void createAndDispatch(Task task, OffsetDateTime scheduledFireTime) {
-        String executionId = "E" + UUID.randomUUID().toString().replace("-", "");
+        String executionId = Ids.newExecutionId();
         boolean callbackMode = !"SYNC".equals(
                 agentRepository.findById(task.agentId()).map(Agent::resultMode).orElse("SYNC"));
         Execution execution = new Execution(
@@ -133,7 +135,9 @@ public class ExecutionService {
         recordConsecutiveFailures(task, execution, Execution.STATUS_FAILED, reason);
     }
 
-    /** 2xx + AgentExecutionResult（sync 响应与 EVENT_CALLBACK 回调共用）：业务 SUCCEEDED/FAILED 均为终态，FAILED 不重试。 */
+    /**
+     * 2xx + AgentExecutionResult（sync 响应与 EVENT_CALLBACK 回调共用）：业务 SUCCEEDED/FAILED 均为终态，FAILED 不重试。
+     */
     public void handleAgentResult(Execution execution, Task task, AgentExecutionResult result) {
         String status = "SUCCEEDED".equals(result.status())
                 ? Execution.STATUS_SUCCEEDED : Execution.STATUS_FAILED;
@@ -148,6 +152,15 @@ public class ExecutionService {
         emitLifecycleEvent(task, execution, status, result.summary());
         recordConsecutiveFailures(task, execution, status, result.summary());
         emitBusinessEvents(task, execution, result);
+    }
+
+    /**
+     * 超时 sweeper 兜底终局：DB 行已由 sweeper 带 WHERE status='RUNNING' 原子置 TIMEOUT，
+     * 这里只补 EXECUTION_TIMEOUT 事件与连续失败计数（终态路径与回调/同步超时一致）。
+     */
+    public void handleSweeperTimeout(Execution execution, Task task, String reason) {
+        emitLifecycleEvent(task, execution, Execution.STATUS_TIMEOUT, reason);
+        recordConsecutiveFailures(task, execution, Execution.STATUS_TIMEOUT, reason);
     }
 
     private void finalizeTerminal(Execution execution, Task task, String status,

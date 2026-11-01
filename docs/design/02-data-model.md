@@ -56,7 +56,7 @@ id INTEGER PK 自增；task_id TEXT NOT NULL；version INT NOT NULL；definition
 event_id TEXT UNIQUE（`V` 前缀）；event_type TEXT NOT NULL；tenant_id TEXT NOT NULL；task_id / execution_id TEXT 可空；severity TEXT 可空；occurred_at TEXT NOT NULL；payload TEXT JSON。索引：(tenant_id, occurred_at)、(task_id)、(event_type)。
 
 ### event_deliveries
-id PK；event_id TEXT NOT NULL；subscription_id INTEGER NOT NULL；status：`PENDING` → `DELIVERED` / `EXHAUSTED`；attempts INT 默认 0；next_retry_at TEXT 可空；delivered_at TEXT 可空；last_status_code INT 可空；last_error TEXT 可空；created_at。UNIQUE(event_id, subscription_id)。索引：(status, next_retry_at)（sweeper 用）。
+id PK；event_id TEXT NOT NULL；subscription_id INTEGER NOT NULL；status：`PENDING` → `DELIVERED` / `EXHAUSTED`，另有 `DEDUPED`（订阅去重命中时的留痕终态：窗口内同 dedup_key 已 DELIVERED 则不推送、直接落 DEDUPED 行，#8 引入）；attempts INT 默认 0；next_retry_at TEXT 可空；delivered_at TEXT 可空；last_status_code INT 可空；last_error TEXT 可空；created_at。UNIQUE(event_id, subscription_id)。索引：(status, next_retry_at)（sweeper 用）。
 
 ### subscriptions
 id INTEGER PK；tenant_id TEXT NOT NULL；callback_url TEXT NOT NULL；secret TEXT NOT NULL（HMAC 密钥，生成于创建响应返回一次，库存哈希？v1 存明文、接口不回显——记入 05 的已知限制）；filter_task_ids / filter_event_types TEXT JSON 数组可空；min_severity TEXT 可空；dedup_window_seconds INT 可空；enabled INT 默认 1；created_at。

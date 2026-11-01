@@ -10,7 +10,7 @@
 - `target.agent_id` 必填，必须存在于 agents 且 enabled=1；`trigger_type` 当前仅 `HTTP_API`。
 - `schedule.type` 当前仅 `CRON`；`expression` 必须是合法 Quartz cron（CronExpression 解析校验，6-7 段均可——秒域必须，年域可选，故 `*/1 * * * * ?` 与 `0 0 * * * ?` 都合法）；`timezone` 必须 IANA 合法；`start_at`/`end_at` 可空、给出时为 ISO-8601。
 - `execution.instruction` 必填；`parameters`、`context_refs` 可空对象/数组。
-- `security.tenant_id` / `owner_user_id`：**仅作声明**，服务端以认证身份覆盖校验（见 05），不一致返回 403 `TENANT_MISMATCH`。
+- `security.tenant_id` / `owner_user_id` / `permission_context_ref`：tenant_id 与认证身份不一致返回 403 `TENANT_MISMATCH`；owner_user_id 仅作声明原样保存（见 05）；`permission_context_ref` 属 security 块（可空）。
 - `execution_policy.timeout_seconds` ≥ 1；`retry_count` ≥ 0；`max_concurrent_executions` ≥ 1。
 
 创建响应：
@@ -25,7 +25,7 @@
 | 接口 | 行为 |
 | --- | --- |
 | GET /api/tasks/{id} | 详情：全字段 + current_version + next_execution_time |
-| GET /api/tasks?tenant=&status= | 列表（tenant 由认证身份决定，status 可选过滤） |
+| GET /api/tasks?tenant=&status= | 列表；租户口径统一（见 05/TenantScope）：CALLER 恒按认证租户（显式 tenant 不一致 → 403），ADMIN 必须显式传 tenant（缺失 → 400 `MISSING_TENANT`）；GET /api/subscriptions、GET /api/events 同口径 |
 | PUT /api/tasks/{id} | 全量更新六块 → 生成 current_version+1 的配置快照，下一触发生效；响应同创建 |
 | POST /api/tasks/{id}/pause · /resume | ACTIVE↔PAUSED；PAUSED 不触发，Resume 立即重算 next |
 | DELETE /api/tasks/{id} | status→STOPPED，Quartz 移除，记录保留；重复 STOPPED 幂等 |
@@ -89,7 +89,12 @@
 
 event_type 枚举（固定 7 个）：`EXECUTION_SUCCEEDED` / `EXECUTION_FAILED` / `EXECUTION_TIMEOUT` / `MISFIRE` / `SKIPPED_CONCURRENT` / `ESCALATED` / `BUSINESS_EVENT`。
 
-- 生命周期事件（前 5 个）：payload 为 `{"summary": "…", "attempt": 1}` 摘要；MISFIRE / SKIPPED_CONCURRENT 无 execution_id（无执行发生），payload 附 `{"scheduled_fire_time": …}` 或 `{"running_execution_id": …}`。
+payload 按类型精确化（与实现一致）：
+
+- `EXECUTION_SUCCEEDED` / `EXECUTION_FAILED` / `EXECUTION_TIMEOUT`：`{"summary": "…", "attempt": 1}`（attempt 为当次触发尝试序号）；MISFIRE / SKIPPED_CONCURRENT 无 execution_id（无执行发生）。
+- `MISFIRE`：`{"scheduled_fire_time": "…ISO-8601…"}`。
+- `SKIPPED_CONCURRENT`：`{"running_execution_id": "E…"}`。
+- `ESCALATED`：`{"consecutive_failures": 3, "summary": "…"}`（计数 ≥ 阈值的每次失败都发，重复由订阅 dedup_window 压制，见 04）。
 - `BUSINESS_EVENT`：Agent 每条 business_event 单独成事件，severity 必填，payload = `{"type","title","content","dedup_key"}`；execution_id 有值。
 - 事件产生即持久化，推送是投递层（event_deliveries），两阶段解耦。
 

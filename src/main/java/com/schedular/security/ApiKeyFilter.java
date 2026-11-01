@@ -1,5 +1,6 @@
 package com.schedular.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedular.common.ApiError;
 import com.schedular.storage.ApiKeyRepository;
 import java.io.IOException;
@@ -24,9 +25,11 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     private static final String AGENTS_PREFIX = "/api/agents";
 
     private final ApiKeyRepository apiKeyRepository;
+    private final ObjectMapper objectMapper;
 
-    public ApiKeyFilter(ApiKeyRepository apiKeyRepository) {
+    public ApiKeyFilter(ApiKeyRepository apiKeyRepository, ObjectMapper objectMapper) {
         this.apiKeyRepository = apiKeyRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -82,13 +85,13 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         }
     }
 
-    private static void writeError(HttpServletResponse response, int status, String code, String message)
+    /** 错误体统一走 ApiError 形状（ObjectMapper 序列化），与 ApiExceptionHandler 一致。 */
+    private void writeError(HttpServletResponse response, int status, String code, String message)
             throws IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.getWriter().write(
-                """
-                {"code":"%s","message":"%s"}""".formatted(code, message));
+                objectMapper.writeValueAsString(ApiError.of(code, message)));
     }
 }

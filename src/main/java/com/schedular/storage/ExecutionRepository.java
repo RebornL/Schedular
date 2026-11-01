@@ -101,6 +101,24 @@ public class ExecutionRepository {
                 Execution.STATUS_FAILED, lastError, finishedAt, executionId);
     }
 
+    /** 超时兜底扫描：RUNNING 且 started_at + timeout_seconds 已过期（04 状态机回调超时分支）。 */
+    public List<Execution> findTimeoutRunning(String now) {
+        return jdbc.query("""
+                SELECT e.* FROM executions e JOIN tasks t ON e.task_id = t.task_id
+                WHERE e.status = ? AND e.started_at IS NOT NULL
+                  AND julianday(e.started_at) + t.timeout_seconds / 86400.0 < julianday(?)""",
+                MAPPER, Execution.STATUS_RUNNING, now);
+    }
+
+    /** 超时终局原子落库：仅 RUNNING 行生效（与回调竞态只有一方成功），返回影响行数。 */
+    public int finalizeTimeoutIfRunning(String executionId, String lastError, String finishedAt) {
+        return jdbc.update("""
+                UPDATE executions SET status = ?, last_error = ?, finished_at = ?
+                WHERE execution_id = ? AND status = ?""",
+                Execution.STATUS_TIMEOUT, lastError, finishedAt, executionId,
+                Execution.STATUS_RUNNING);
+    }
+
     public void updateCallbackToken(String executionId, String callbackToken) {
         jdbc.update("UPDATE executions SET callback_token = ? WHERE execution_id = ?",
                 callbackToken, executionId);

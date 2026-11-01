@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.schedular.common.ApiException;
 import com.schedular.security.TenantContext;
-import com.schedular.security.TenantPrincipal;
+import com.schedular.security.TenantScope;
 import com.schedular.storage.Event;
 import com.schedular.storage.EventRepository;
 import java.time.OffsetDateTime;
@@ -39,12 +39,10 @@ public class EventQueryController {
             @RequestParam(name = "event_type", required = false) String eventType,
             @RequestParam(name = "min_severity", required = false) String minSeverity,
             @RequestParam(required = false) String since,
+            @RequestParam(required = false) String tenant,
             @RequestParam(defaultValue = "50") int limit) {
-        TenantPrincipal principal = TenantContext.get();
-        if (principal == null || principal.tenantId() == null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "TENANT_REQUIRED",
-                    "事件查询必须绑定租户：认证身份未绑定 tenant_id");
-        }
+        // tenant 口径见 security/TenantScope：CALLER 恒按认证租户，ADMIN 必须显式传 tenant
+        String scope = TenantScope.resolve(TenantContext.get(), tenant);
         Integer minSeverityRank = null;
         if (minSeverity != null && !minSeverity.isBlank()) {
             minSeverityRank = SEVERITIES.indexOf(minSeverity);
@@ -67,7 +65,7 @@ public class EventQueryController {
                     "limit 取值 1-200（默认 50）");
         }
         return eventRepository
-                .search(principal.tenantId(), blankToNull(taskId), blankToNull(eventType),
+                .search(scope, blankToNull(taskId), blankToNull(eventType),
                         minSeverityRank, sinceIso, limit)
                 .stream()
                 .map(this::envelope)

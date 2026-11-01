@@ -19,8 +19,7 @@ public record TaskCreateRequest(
     public record TaskBlock(
             String name,
             String description,
-            String taskType,
-            String permissionContextRef) {
+            String taskType) {
     }
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -49,7 +48,8 @@ public record TaskCreateRequest(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record SecurityBlock(
             String tenantId,
-            String ownerUserId) {
+            String ownerUserId,
+            String permissionContextRef) {
     }
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)

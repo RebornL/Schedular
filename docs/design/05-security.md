@@ -11,6 +11,8 @@
 
 ScheduledTaskCreateRequest.security 声明的 tenant_id / owner_user_id：tenant_id 与 TenantContext 不符 → 403 `TENANT_MISMATCH`；owner_user_id 原样保存（平台无法验证用户级归属，记录声明值 + 认证 caller_name 一起审计）。查询/更新/删除/订阅/事件全部按 TenantContext 过滤，跨租户访问 → 404（不泄露存在性）。
 
+查询口租户参数口径（TenantScope，适用于 GET /api/tasks、GET /api/subscriptions、GET /api/events 及任务单资源接口的 `tenant` 参数）：CALLER 恒按认证身份租户过滤，显式 tenant 不一致 → 403 `TENANT_MISMATCH`；ADMIN（无租户绑定）必须显式传 `?tenant=`，缺失 → 400 `MISSING_TENANT`。
+
 ## HMAC webhook 签名（调度服务 → 订阅方）
 
 - 签名串：`<timestamp>.<rawBody>`（timestamp = Unix 秒）。

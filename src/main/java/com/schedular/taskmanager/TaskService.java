@@ -4,8 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedular.common.ApiException;
+import com.schedular.common.Ids;
 import com.schedular.scheduler.TaskScheduleManager;
 import com.schedular.security.TenantContext;
+import com.schedular.security.TenantScope;
 import com.schedular.security.TenantPrincipal;
 import com.schedular.storage.AgentRepository;
 import com.schedular.storage.Task;
@@ -15,7 +17,6 @@ import com.schedular.storage.TaskRepository;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
-import java.util.UUID;
 import org.quartz.CronExpression;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -58,8 +59,8 @@ public class TaskService {
     public TaskView.Created create(TaskCreateRequest request) {
         Validated v = validated(request);
         String now = nowIso();
-        Task task = new Task("T" + UUID.randomUUID().toString().replace("-", ""),
-                v.tenantId(), v.ownerUserId(), request.task().permissionContextRef(),
+        Task task = new Task(Ids.newTaskId(),
+                v.tenantId(), v.ownerUserId(), permissionRef(request),
                 request.task().name(), request.task().description(), TASK_TYPE,
                 v.agentId(), request.target().agentVersion(), TRIGGER_TYPE, SCHEDULE_TYPE,
                 v.cron(), v.timezone(), v.startAt(), v.endAt(), request.execution().instruction(),
@@ -78,8 +79,8 @@ public class TaskService {
      * 全量更新：六块校验与创建一致 → 新快照（version+1）→ 更新 tasks 行 → 触发器重建。
      * 租户不可变更；STOPPED 不重建触发器；PAUSED 重建后保持暂停，恢复后按新版本执行。
      */
-    public TaskView.Created update(String taskId, TaskCreateRequest request) {
-        Task existing = findOwned(taskId);
+    public TaskView.Created update(String taskId, String tenant, TaskCreateRequest request) {
+        Task existing = findOwned(taskId, tenant);
         Validated v = validated(request);
         if (!v.tenantId().equals(existing.tenantId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "TENANT_MISMATCH", "任务不可变更租户");
@@ -87,7 +88,7 @@ public class TaskService {
         int version = existing.currentVersion() + 1;
         String now = nowIso();
         Task updated = new Task(taskId, existing.tenantId(), v.ownerUserId(),
-                request.task().permissionContextRef(), request.task().name(),
+                permissionRef(request), request.task().name(),
                 request.task().description(), TASK_TYPE, v.agentId(),
                 request.target().agentVersion(), TRIGGER_TYPE, SCHEDULE_TYPE,
                 v.cron(), v.timezone(), v.startAt(), v.endAt(), request.execution().instruction(),
@@ -201,19 +202,24 @@ public class TaskService {
                 startAt, endAt, timeout, retry, maxConcurrent);
     }
 
-    public TaskView get(String taskId) {
-        Task task = findOwned(taskId);
+    /** permission_context_ref 属协议 security 块（B3 回位）；tasks 表列不变。 */
+    private static String permissionRef(TaskCreateRequest request) {
+        return request.security() != null ? request.security().permissionContextRef() : null;
+    }
+
+    public TaskView get(String taskId, String tenant) {
+        Task task = findOwned(taskId, tenant);
         return toView(task);
     }
 
-    public List<TaskView> list(String status) {
+    public List<TaskView> list(String tenant, String status) {
         TenantPrincipal principal = requirePrincipal();
-        return taskRepository.findByTenant(principal.tenantId(), status).stream()
-                .map(this::toView).toList();
+        return taskRepository.findByTenant(TenantScope.resolve(principal, tenant), status)
+                .stream().map(this::toView).toList();
     }
 
-    public TaskView pause(String taskId) {
-        Task task = findOwned(taskId);
+    public TaskView pause(String taskId, String tenant) {
+        Task task = findOwned(taskId, tenant);
         if (!"PAUSED".equals(task.status())) {
             String now = nowIso();
             taskRepository.updateStatus(taskId, "PAUSED", now);
@@ -223,8 +229,8 @@ public class TaskService {
         return toView(task);
     }
 
-    public TaskView resume(String taskId) {
-        Task task = findOwned(taskId);
+    public TaskView resume(String taskId, String tenant) {
+        Task task = findOwned(taskId, tenant);
         if ("STOPPED".equals(task.status())) {
             throw invalidRequest("已停用任务不可恢复");
         }
@@ -237,8 +243,8 @@ public class TaskService {
         return toView(task);
     }
 
-    public TaskView stop(String taskId) {
-        Task task = findOwned(taskId);
+    public TaskView stop(String taskId, String tenant) {
+        Task task = findOwned(taskId, tenant);
         if (!"STOPPED".equals(task.status())) {
             String now = nowIso();
             taskRepository.updateStatus(taskId, "STOPPED", now);
@@ -248,10 +254,12 @@ public class TaskService {
         return toView(task);
     }
 
-    private Task findOwned(String taskId) {
+    /** 单资源访问同查询口口径：CALLER 恒按认证租户，ADMIN 须显式传 tenant（TenantScope）。 */
+    private Task findOwned(String taskId, String tenant) {
         TenantPrincipal principal = requirePrincipal();
+        String scope = TenantScope.resolve(principal, tenant);
         return taskRepository.findById(taskId)
-                .filter(t -> principal.tenantId() == null || principal.tenantId().equals(t.tenantId()))
+                .filter(t -> scope.equals(t.tenantId()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND",
                         "任务不存在: " + taskId));
     }

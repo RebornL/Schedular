@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedular.common.ApiException;
 import com.schedular.security.TenantContext;
 import com.schedular.security.TenantPrincipal;
+import com.schedular.security.TenantScope;
 import com.schedular.storage.Subscription;
 import com.schedular.storage.SubscriptionRepository;
 import java.net.URI;
@@ -58,9 +59,12 @@ public class SubscriptionService {
                 subscription.createdAt());
     }
 
-    public List<SubscriptionView> list() {
+    public List<SubscriptionView> list(String tenant) {
         TenantPrincipal principal = TenantContext.get();
-        return subscriptionRepository.findByTenant(principal.tenantId()).stream()
+        if (principal == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "缺少认证身份");
+        }
+        return subscriptionRepository.findByTenant(TenantScope.resolve(principal, tenant)).stream()
                 .map(s -> SubscriptionView.from(s, fromJson(s.filterTaskIds()),
                         fromJson(s.filterEventTypes())))
                 .toList();

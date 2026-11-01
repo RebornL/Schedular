@@ -27,34 +27,41 @@ public class TaskController {
         return taskService.create(request);
     }
 
+    /** tenant 口径见 security/TenantScope：CALLER 恒按认证租户，ADMIN 必须显式传 tenant。 */
     @GetMapping
-    public List<TaskView> list(@RequestParam(required = false) String status) {
-        return taskService.list(status);
+    public List<TaskView> list(@RequestParam(required = false) String tenant,
+                               @RequestParam(required = false) String status) {
+        return taskService.list(tenant, status);
     }
 
     @GetMapping("/{taskId}")
-    public TaskView get(@PathVariable String taskId) {
-        return taskService.get(taskId);
+    public TaskView get(@PathVariable String taskId,
+                        @RequestParam(required = false) String tenant) {
+        return taskService.get(taskId, tenant);
     }
 
     @PutMapping("/{taskId}")
     public TaskView.Created update(@PathVariable String taskId,
+                                   @RequestParam(required = false) String tenant,
                                    @RequestBody TaskCreateRequest request) {
-        return taskService.update(taskId, request);
+        return taskService.update(taskId, tenant, request);
     }
 
     @PostMapping("/{taskId}/pause")
-    public TaskView pause(@PathVariable String taskId) {
-        return taskService.pause(taskId);
+    public TaskView pause(@PathVariable String taskId,
+                          @RequestParam(required = false) String tenant) {
+        return taskService.pause(taskId, tenant);
     }
 
     @PostMapping("/{taskId}/resume")
-    public TaskView resume(@PathVariable String taskId) {
-        return taskService.resume(taskId);
+    public TaskView resume(@PathVariable String taskId,
+                           @RequestParam(required = false) String tenant) {
+        return taskService.resume(taskId, tenant);
     }
 
     @DeleteMapping("/{taskId}")
-    public TaskView stop(@PathVariable String taskId) {
-        return taskService.stop(taskId);
+    public TaskView stop(@PathVariable String taskId,
+                         @RequestParam(required = false) String tenant) {
+        return taskService.stop(taskId, tenant);
     }
 }

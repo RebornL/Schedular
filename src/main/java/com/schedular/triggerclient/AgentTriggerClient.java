@@ -33,18 +33,21 @@ public class AgentTriggerClient {
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper;
     private final int ackTimeoutSeconds;
+    private final java.time.Clock clock;
 
     public AgentTriggerClient(ObjectMapper objectMapper,
-                              @Value("${schedular.ack-timeout-seconds:30}") int ackTimeoutSeconds) {
+                              @Value("${schedular.ack-timeout-seconds:30}") int ackTimeoutSeconds,
+                              java.time.Clock clock) {
         this.objectMapper = objectMapper;
         this.ackTimeoutSeconds = ackTimeoutSeconds;
+        this.clock = clock;
     }
 
     public TriggerOutcome trigger(Task task, Agent agent, Execution execution) {
         boolean sync = "SYNC".equals(agent.resultMode());
         AgentTriggerRequest request = new AgentTriggerRequest(
                 task.taskId(), execution.executionId(), task.currentVersion(), "SCHEDULED",
-                OffsetDateTime.now().toString(),
+                OffsetDateTime.now(clock).toString(),
                 sync ? null : new AgentTriggerRequest.Callback(
                         agent.resultMode(),
                         "/api/agent-executions/" + execution.executionId() + "/result",

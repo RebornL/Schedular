@@ -9,6 +9,7 @@ spring:
 schedular:
   ack-timeout-seconds: 30
   misfire-threshold-seconds: 60
+  execution-timeout-sweep-interval: 30s
   push:
     retry-delays: 30s,5m,30m
     sweeper-interval: 30s

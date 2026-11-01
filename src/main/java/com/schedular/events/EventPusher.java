@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.schedular.security.HmacSigner;
 import com.schedular.storage.Event;
 import com.schedular.storage.EventDelivery;
 import com.schedular.storage.EventDeliveryRepository;
@@ -14,15 +15,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.util.HexFormat;
 import java.util.List;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -89,41 +86,60 @@ public class EventPusher implements EventSink {
         }
     }
 
-    /** 投递前重查投递行：已非 PENDING（DEDUPED/终态/他方处理中）即放弃，防 sweeper 与内存重试双发。 */
+    /**
+     * 投递前重查投递行：已非 PENDING（DEDUPED/终态/他方处理中）即放弃，防 sweeper 与内存重试双发。
+     * 失败路径（非 2xx / 连接异常）统一走 recordFailure：单次更新推进 PENDING 或 EXHAUSTED。
+     */
     void attempt(Subscription subscription, Event event) {
+        EventDelivery delivery;
         try {
-            EventDelivery delivery = deliveryRepository
+            delivery = deliveryRepository
                     .find(event.eventId(), subscription.id().intValue()).orElse(null);
-            if (delivery == null || !"PENDING".equals(delivery.status())) {
-                return;
-            }
-            String body = envelope(event);
-            int statusCode = push(subscription, body);
-            int attempts = delivery.attempts() + 1;
-            if (statusCode >= 200 && statusCode < 300) {
-                deliveryRepository.update(new EventDelivery(
-                        delivery.eventId(), delivery.subscriptionId(), "DELIVERED",
-                        attempts, null, nowIso(), statusCode, null, delivery.createdAt()));
-                return;
-            }
-            deliveryRepository.update(new EventDelivery(
-                    delivery.eventId(), delivery.subscriptionId(), "PENDING",
-                    attempts,
-                    attempts <= retryDelays.size() ? nowIsoAfter(retryDelays.get(attempts - 1)) : null,
-                    null, statusCode,
-                    "HTTP " + statusCode, delivery.createdAt()));
-            if (attempts <= retryDelays.size()) {
-                scheduler.schedule(() -> attempt(subscription, event), Instant.now(clock).plus(retryDelays.get(attempts - 1)));
-            } else {
-                deliveryRepository.update(new EventDelivery(
-                        delivery.eventId(), delivery.subscriptionId(), "EXHAUSTED",
-                        attempts, null, null, statusCode,
-                        "重试穷尽: HTTP " + statusCode, delivery.createdAt()));
-            }
+        } catch (RuntimeException e) {
+            log.warn("投递行读取失败: event_id={}, subscription_id={}",
+                    event.eventId(), subscription.id(), e);
+            return;
+        }
+        if (delivery == null || !"PENDING".equals(delivery.status())) {
+            return;
+        }
+        int attempts = delivery.attempts() + 1;
+        Integer statusCode = null;
+        String error = "连接异常";
+        try {
+            statusCode = push(subscription, envelope(event));
+            error = "HTTP " + statusCode;
         } catch (RuntimeException | IOException e) {
             log.warn("推送异常: event_id={}, subscription_id={}",
                     event.eventId(), subscription.id(), e);
-            markFailedOnException(subscription, event);
+        }
+        if (statusCode != null && statusCode >= 200 && statusCode < 300) {
+            deliveryRepository.update(new EventDelivery(
+                    delivery.eventId(), delivery.subscriptionId(), "DELIVERED",
+                    attempts, null, nowIso(), statusCode, null, delivery.createdAt()));
+            return;
+        }
+        recordFailure(subscription, event, delivery, attempts, statusCode, error);
+    }
+
+    /** 失败推进：未穷尽 → PENDING + next_retry_at 并安排重试；穷尽 → EXHAUSTED 终态，一次更新完成。 */
+    private void recordFailure(Subscription subscription, Event event, EventDelivery delivery,
+                               int attempts, Integer statusCode, String error) {
+        try {
+            boolean exhausted = attempts > retryDelays.size();
+            deliveryRepository.update(new EventDelivery(
+                    delivery.eventId(), delivery.subscriptionId(),
+                    exhausted ? "EXHAUSTED" : "PENDING",
+                    attempts,
+                    exhausted ? null : nowIsoAfter(retryDelays.get(attempts - 1)),
+                    null, statusCode, error, delivery.createdAt()));
+            if (!exhausted) {
+                scheduler.schedule(() -> attempt(subscription, event),
+                        Instant.now(clock).plus(retryDelays.get(attempts - 1)));
+            }
+        } catch (RuntimeException e) {
+            log.warn("投递行更新失败: event_id={}, subscription_id={}",
+                    event.eventId(), subscription.id(), e);
         }
     }
 
@@ -151,34 +167,9 @@ public class EventPusher implements EventSink {
         return false;
     }
 
-    private void markFailedOnException(Subscription subscription, Event event) {
-        try {
-            deliveryRepository.find(event.eventId(), subscription.id().intValue()).ifPresent(delivery -> {
-                if (!"PENDING".equals(delivery.status())) {
-                    return;
-                }
-                int attempts = delivery.attempts() + 1;
-                if (attempts <= retryDelays.size()) {
-                    deliveryRepository.update(new EventDelivery(
-                            delivery.eventId(), delivery.subscriptionId(), "PENDING", attempts,
-                            nowIsoAfter(retryDelays.get(attempts - 1)), null, null,
-                            "连接异常", delivery.createdAt()));
-                    scheduler.schedule(() -> attempt(subscription, event),
-                            Instant.now(clock).plus(retryDelays.get(attempts - 1)));
-                } else {
-                    deliveryRepository.update(new EventDelivery(
-                            delivery.eventId(), delivery.subscriptionId(), "EXHAUSTED", attempts,
-                            null, null, null, "连接异常", delivery.createdAt()));
-                }
-            });
-        } catch (RuntimeException e) {
-            log.warn("投递行更新失败: event_id={}", event.eventId(), e);
-        }
-    }
-
     private int push(Subscription subscription, String body) throws IOException {
         long timestamp = Instant.now(clock).getEpochSecond();
-        String signature = hmacSha256Hex(subscription.secret(),
+        String signature = HmacSigner.hmacSha256Hex(subscription.secret(),
                 timestamp + "." + body);
         HttpRequest request;
         try {
@@ -267,17 +258,6 @@ public class EventPusher implements EventSink {
             return mapper.readTree(json);
         } catch (IOException e) {
             return null;
-        }
-    }
-
-    private static String hmacSha256Hex(String secret, String data) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            return HexFormat.of().formatHex(
-                    mac.doFinal(data.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new IllegalStateException("HMAC-SHA256 计算失败", e);
         }
     }
 

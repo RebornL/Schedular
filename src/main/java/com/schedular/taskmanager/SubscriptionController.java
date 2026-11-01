@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** /api/subscriptions/**：CALLER / ADMIN 均可用，租户按 TenantContext 过滤。 */
@@ -25,9 +26,10 @@ public class SubscriptionController {
         return subscriptionService.create(request);
     }
 
+    /** tenant 口径见 security/TenantScope：CALLER 恒按认证租户，ADMIN 必须显式传 tenant。 */
     @GetMapping
-    public List<SubscriptionView> list() {
-        return subscriptionService.list();
+    public List<SubscriptionView> list(@RequestParam(required = false) String tenant) {
+        return subscriptionService.list(tenant);
     }
 
     @DeleteMapping("/{id}")

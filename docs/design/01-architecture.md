@@ -8,11 +8,11 @@
 com.schedular
 ├── SchedularApplication
 ├── common/        # ApiError、异常、JsonUtil（Jackson 封装）、Ids（前缀+UUID）、Clock Bean
-├── security/      # ApiKeyFilter（OncePerRequestFilter）、TenantContext、HmacSigner
+├── security/      # ApiKeyFilter（OncePerRequestFilter）、TenantContext、TenantScope（查询租户口径）、HmacSigner（webhook HMAC 签名，EventPusher 调用）
 ├── storage/       # repository 接口 + JdbcTemplate 实现 + 领域 record
 ├── taskmanager/   # TaskService、AgentRegistryService、SubscriptionService、ExecutionQueryService
 │                  # controllers：TaskController / AgentController / SubscriptionController / ExecutionQueryController / EventController
-├── scheduler/     # QuartzConfig、TaskJob（到点入口）、DispatchGuard（misfire/并发判定）
+├── scheduler/     # QuartzConfig、TaskJob（到点入口）、DispatchGuard（misfire/并发判定）、ExecutionTimeoutSweeper（EVENT_CALLBACK 回调超时兜底）
 ├── triggerclient/ # AgentTriggerClient（出站 HTTP、ack/result 解析、两类超时）、CallbackController（结果回调接收）
 └── events/        # EventService（事件持久化）、EventPusher（订阅匹配 + HMAC 推送 + 重试）、DeliverySweeper
 ```
@@ -51,6 +51,7 @@ Spring Boot 版本固定 3.4.5。**禁止额外引入**：JPA、Lombok（手写�
 | 键 | 默认 | 含义 |
 | --- | --- | --- |
 | `schedular.ack-timeout-seconds` | 30 | EVENT_CALLBACK 模式等待受理回执的窗口，超时属链路故障→重试 |
+| `schedular.execution-timeout-sweep-interval` | 30s | 执行超时兜底扫描周期（RUNNING 且 started_at+timeout_seconds 过期 → TIMEOUT） |
 | `schedular.misfire-threshold-seconds` | 60 | 触发时刻与计划触发时刻之差超过该值 → MISFIRE 跳过 |
 | `schedular.push.retry-delays` | 30s,5m,30m | webhook 推送失败重试节奏 |
 | `schedular.push.sweeper-interval` | 30s | 投递扫描周期（重启后恢复 PENDING 投递） |
@@ -60,5 +61,6 @@ Spring Boot 版本固定 3.4.5。**禁止额外引入**：JPA、Lombok（手写�
 ## 依赖不变量
 
 - 所有 SQL 只经 storage 包的 repository 发出；业务代码不得持有 JdbcTemplate。
+- HMAC webhook 签名统一经 `security/HmacSigner`（当前由 events/EventPusher 调用，签名串 `<timestamp>.<rawBody>`）。
 - 没有任何物理 DELETE（spec：记录永不删除）；停用/穷尽都是状态推进。
 - 时钟统一注入 `Clock` Bean（测试可替换）；时间戳格式 `yyyy-MM-dd'T'HH:mm:ssXXX`（ISO-8601 带时区偏移）。

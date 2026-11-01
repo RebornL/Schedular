@@ -3,11 +3,12 @@ package com.schedular.events;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedular.storage.Event;
+import com.schedular.common.Ids;
 import com.schedular.storage.EventRepository;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.Map;
-import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -38,7 +39,7 @@ public class EventService {
     public Event persist(String eventType, String tenantId, String taskId, String executionId,
                          String severity, Map<String, Object> payload) {
         Event event = new Event(
-                "V" + UUID.randomUUID().toString().replace("-", ""),
+                Ids.newEventId(),
                 eventType, tenantId, taskId, executionId, severity,
                 OffsetDateTime.now(clock).toString(), toJson(payload));
         eventRepository.insert(event);
