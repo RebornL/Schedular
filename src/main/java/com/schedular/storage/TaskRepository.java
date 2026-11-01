@@ -82,4 +82,23 @@ public class TaskRepository {
                 "UPDATE tasks SET status = ?, updated_at = ? WHERE task_id = ?",
                 status, updatedAt, taskId);
     }
+
+    /** 全量更新配置列（不含 status/consecutive_failures/created_at），current_version 由调用方计算。 */
+    public int update(Task task) {
+        return jdbc.update("""
+                UPDATE tasks SET owner_user_id = ?, permission_context_ref = ?, name = ?,
+                                  description = ?, task_type = ?, agent_id = ?, agent_version = ?,
+                                  trigger_type = ?, schedule_type = ?, cron_expression = ?,
+                                  timezone = ?, start_at = ?, end_at = ?, instruction = ?,
+                                  parameters = ?, context_refs = ?, timeout_seconds = ?,
+                                  retry_count = ?, max_concurrent_executions = ?,
+                                  current_version = ?, updated_at = ?
+                WHERE task_id = ?""",
+                task.ownerUserId(), task.permissionContextRef(), task.name(), task.description(),
+                task.taskType(), task.agentId(), task.agentVersion(), task.triggerType(),
+                task.scheduleType(), task.cronExpression(), task.timezone(), task.startAt(),
+                task.endAt(), task.instruction(), task.parameters(), task.contextRefs(),
+                task.timeoutSeconds(), task.retryCount(), task.maxConcurrentExecutions(),
+                task.currentVersion(), task.updatedAt(), task.taskId());
+    }
 }

@@ -49,7 +49,66 @@ public class TaskService {
         this.clock = clock;
     }
 
+    /** 六块校验结果：create/update 共用同一套校验逻辑。 */
+    private record Validated(String tenantId, String ownerUserId, String agentId,
+                             String cron, String timezone, String startAt, String endAt,
+                             int timeoutSeconds, int retryCount, int maxConcurrentExecutions) {
+    }
+
     public TaskView.Created create(TaskCreateRequest request) {
+        Validated v = validated(request);
+        String now = nowIso();
+        Task task = new Task("T" + UUID.randomUUID().toString().replace("-", ""),
+                v.tenantId(), v.ownerUserId(), request.task().permissionContextRef(),
+                request.task().name(), request.task().description(), TASK_TYPE,
+                v.agentId(), request.target().agentVersion(), TRIGGER_TYPE, SCHEDULE_TYPE,
+                v.cron(), v.timezone(), v.startAt(), v.endAt(), request.execution().instruction(),
+                toJson(request.execution().parameters()), toJson(request.execution().contextRefs()),
+                v.timeoutSeconds(), v.retryCount(), v.maxConcurrentExecutions(),
+                1, "ACTIVE", 0, now, now);
+        taskRepository.insert(task);
+        configVersionRepository.insert(new TaskConfigVersion(null, task.taskId(), 1,
+                toJson(request), now));
+        scheduleManager.register(task);
+        return new TaskView.Created(task.taskId(), task.status(), task.agentId(),
+                isoOrNull(scheduleManager.nextExecutionTime(task)), task.currentVersion());
+    }
+
+    /**
+     * 全量更新：六块校验与创建一致 → 新快照（version+1）→ 更新 tasks 行 → 触发器重建。
+     * 租户不可变更；STOPPED 不重建触发器；PAUSED 重建后保持暂停，恢复后按新版本执行。
+     */
+    public TaskView.Created update(String taskId, TaskCreateRequest request) {
+        Task existing = findOwned(taskId);
+        Validated v = validated(request);
+        if (!v.tenantId().equals(existing.tenantId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "TENANT_MISMATCH", "任务不可变更租户");
+        }
+        int version = existing.currentVersion() + 1;
+        String now = nowIso();
+        Task updated = new Task(taskId, existing.tenantId(), v.ownerUserId(),
+                request.task().permissionContextRef(), request.task().name(),
+                request.task().description(), TASK_TYPE, v.agentId(),
+                request.target().agentVersion(), TRIGGER_TYPE, SCHEDULE_TYPE,
+                v.cron(), v.timezone(), v.startAt(), v.endAt(), request.execution().instruction(),
+                toJson(request.execution().parameters()), toJson(request.execution().contextRefs()),
+                v.timeoutSeconds(), v.retryCount(), v.maxConcurrentExecutions(),
+                version, existing.status(), existing.consecutiveFailures(),
+                existing.createdAt(), now);
+        taskRepository.update(updated);
+        configVersionRepository.insert(new TaskConfigVersion(null, taskId, version,
+                toJson(request), now));
+        if (!"STOPPED".equals(updated.status())) {
+            scheduleManager.reschedule(updated);
+            if ("PAUSED".equals(updated.status())) {
+                scheduleManager.pause(taskId);
+            }
+        }
+        return new TaskView.Created(taskId, updated.status(), updated.agentId(),
+                isoOrNull(scheduleManager.nextExecutionTime(updated)), version);
+    }
+
+    private Validated validated(TaskCreateRequest request) {
         if (request == null || isBlank(request.task()) || isBlank(request.target())
                 || isBlank(request.schedule()) || isBlank(request.execution())
                 || isBlank(request.executionPolicy())) {
@@ -138,21 +197,8 @@ public class TaskService {
         }
         String ownerUserId = request.security() != null ? request.security().ownerUserId()
                 : principal.callerName();
-
-        String now = nowIso();
-        Task task = new Task("T" + UUID.randomUUID().toString().replace("-", ""),
-                tenantId, ownerUserId, request.task().permissionContextRef(),
-                request.task().name(), request.task().description(), TASK_TYPE,
-                agentId, request.target().agentVersion(), TRIGGER_TYPE, SCHEDULE_TYPE,
-                cron.trim(), timezone, startAt, endAt, request.execution().instruction(),
-                toJson(request.execution().parameters()), toJson(request.execution().contextRefs()),
-                timeout, retry, maxConcurrent, 1, "ACTIVE", 0, now, now);
-        taskRepository.insert(task);
-        configVersionRepository.insert(new TaskConfigVersion(null, task.taskId(), 1,
-                toJson(request), now));
-        scheduleManager.register(task);
-        return new TaskView.Created(task.taskId(), task.status(), task.agentId(),
-                isoOrNull(scheduleManager.nextExecutionTime(task)), task.currentVersion());
+        return new Validated(tenantId, ownerUserId, agentId, cron.trim(), timezone,
+                startAt, endAt, timeout, retry, maxConcurrent);
     }
 
     public TaskView get(String taskId) {

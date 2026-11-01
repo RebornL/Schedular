@@ -42,6 +42,25 @@ public class TaskScheduleManager {
         }
     }
 
+    /** 触发器替换：jobKey/triggerKey 不变，cron/timezone/start_at/end_at 变更生效。 */
+    public void reschedule(Task task) {
+        try {
+            org.quartz.JobKey jobKey = org.quartz.JobKey.jobKey(task.taskId());
+            Trigger trigger = QuartzConfig.buildTrigger(task);
+            org.quartz.TriggerKey triggerKey = trigger.getKey();
+            if (scheduler.checkExists(triggerKey)) {
+                scheduler.rescheduleJob(triggerKey, trigger);
+            } else if (scheduler.checkExists(jobKey)) {
+                scheduler.scheduleJob(trigger);
+            } else {
+                scheduler.scheduleJob(QuartzConfig.buildJobDetail(task.taskId()), trigger);
+            }
+        } catch (SchedulerException e) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SCHEDULE_ERROR",
+                    "Quartz 重排触发器失败: " + e.getMessage());
+        }
+    }
+
     public void pause(String taskId) {
         try {
             scheduler.pauseJob(org.quartz.JobKey.jobKey(taskId));
