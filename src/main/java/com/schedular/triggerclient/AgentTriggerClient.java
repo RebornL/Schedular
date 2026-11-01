@@ -72,6 +72,7 @@ public class AgentTriggerClient {
                     task.taskId(), execution.executionId(), agent.endpointUrl(), agent.resultMode());
             HttpResponse<String> response = http.send(httpRequest, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                log.warn("Agent 非 2xx 响应体: {}", response.body());
                 return TriggerOutcome.linkFailure(
                         "Agent 返回非 2xx: HTTP " + response.statusCode());
             }

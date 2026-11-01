@@ -76,6 +76,30 @@ public class ExecutionRepository {
                 Execution.STATUS_PENDING, lastError, executionId);
     }
 
+    /** 并发判定用：task 的 PENDING+RUNNING 行，最早在前；excludeExecutionId 为 null 时不过滤。 */
+    public List<Execution> findActiveByTask(String taskId, String excludeExecutionId) {
+        return jdbc.query("""
+                SELECT * FROM executions
+                WHERE task_id = ? AND status IN ('PENDING', 'RUNNING')
+                  AND (? IS NULL OR execution_id <> ?)
+                ORDER BY created_at ASC""",
+                MAPPER, taskId, excludeExecutionId, excludeExecutionId);
+    }
+
+    /** 链路重试：attempt 单调递增。 */
+    public void updateAttempt(String executionId, int attempt) {
+        jdbc.update("UPDATE executions SET attempt = ? WHERE execution_id = ?",
+                attempt, executionId);
+    }
+
+    /** 重试穷尽等链路终局：FAILED 终态 + last_error；已终态不回退。 */
+    public void finalizeFailed(String executionId, String lastError, String finishedAt) {
+        jdbc.update("""
+                UPDATE executions SET status = ?, last_error = ?, finished_at = ?
+                WHERE execution_id = ? AND status NOT IN ('SUCCEEDED', 'FAILED', 'TIMEOUT')""",
+                Execution.STATUS_FAILED, lastError, finishedAt, executionId);
+    }
+
     public void updateCallbackToken(String executionId, String callbackToken) {
         jdbc.update("UPDATE executions SET callback_token = ? WHERE execution_id = ?",
                 callbackToken, executionId);
