@@ -291,9 +291,12 @@ class SubscriptionPushSemanticsTest {
         awaitRecorded("hmac", 2);
         var recorded = StubSubscriberController.REQUESTS.get("hmac");
         recorded.forEach(r -> verifySignature(secret, r));
-        // 信封字段齐全，payload 为对象
-        JsonNode envelope = read(recorded.get(1).body());
-        assertThat(envelope.path("event_id").asText()).isEqualTo(business);
+        // 信封字段齐全，payload 为对象；两事件异步推送，按 event_id 定位 BUSINESS_EVENT，不按下标
+        JsonNode envelope = recorded.stream()
+                .map(r -> read(r.body()))
+                .filter(b -> business.equals(b.path("event_id").asText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("未收到 BUSINESS_EVENT 推送: " + business));
         assertThat(envelope.path("event_type").asText()).isEqualTo("BUSINESS_EVENT");
         assertThat(envelope.path("tenant_id").asText()).isEqualTo("tenant-push-d");
         assertThat(envelope.path("payload").path("title").asText()).isEqualTo("业务事件");
