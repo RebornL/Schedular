@@ -59,4 +59,21 @@ public class EventDeliveryRepository {
         return jdbc.query("SELECT * FROM event_deliveries WHERE event_id = ? ORDER BY subscription_id ASC",
                 MAPPER, eventId);
     }
+
+    /** DeliverySweeper 入口：到期未投递的 PENDING 行（next_retry_at 为空的行由内存重试负责，不扫）。 */
+    public List<EventDelivery> findDuePending(String nowIso) {
+        return jdbc.query("""
+                SELECT * FROM event_deliveries
+                WHERE status = 'PENDING' AND next_retry_at IS NOT NULL AND next_retry_at <= ?
+                ORDER BY id ASC""", MAPPER, nowIso);
+    }
+
+    /** 去重判定：窗口内已 DELIVERED 的投递对应事件 payload（由调用方解析比对 dedup_key）。 */
+    public List<String> findDeliveredPayloadsSince(int subscriptionId, String sinceIso) {
+        return jdbc.queryForList("""
+                SELECT e.payload FROM event_deliveries d
+                JOIN events e ON e.event_id = d.event_id
+                WHERE d.subscription_id = ? AND d.status = 'DELIVERED' AND e.occurred_at >= ?""",
+                String.class, subscriptionId, sinceIso);
+    }
 }

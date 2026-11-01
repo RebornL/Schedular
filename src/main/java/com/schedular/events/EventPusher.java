@@ -71,6 +71,13 @@ public class EventPusher implements EventSink {
                 if (!subscription.enabled() || !matches(subscription, event)) {
                     continue;
                 }
+                if (isDuplicate(subscription, event)) {
+                    // 窗口内同 dedup_key 已 DELIVERED：不推送，落 DEDUPED 投递行留痕
+                    deliveryRepository.insert(new EventDelivery(
+                            event.eventId(), subscription.id().intValue(), "DEDUPED", 0,
+                            null, null, null, "窗口内同 dedup_key 已推送", nowIso()));
+                    continue;
+                }
                 EventDelivery delivery = new EventDelivery(
                         event.eventId(), subscription.id().intValue(), "PENDING", 0,
                         null, null, null, null, nowIso());
@@ -82,7 +89,8 @@ public class EventPusher implements EventSink {
         }
     }
 
-    private void attempt(Subscription subscription, Event event) {
+    /** 投递前重查投递行：已非 PENDING（DEDUPED/终态/他方处理中）即放弃，防 sweeper 与内存重试双发。 */
+    void attempt(Subscription subscription, Event event) {
         try {
             EventDelivery delivery = deliveryRepository
                     .find(event.eventId(), subscription.id().intValue()).orElse(null);
@@ -117,6 +125,30 @@ public class EventPusher implements EventSink {
                     event.eventId(), subscription.id(), e);
             markFailedOnException(subscription, event);
         }
+    }
+
+    /** 去重：仅 payload 带 dedup_key 且订阅配置了窗口时生效；key = 订阅 id + payload.dedup_key。 */
+    private boolean isDuplicate(Subscription subscription, Event event) {
+        Integer window = subscription.dedupWindowSeconds();
+        if (window == null || window <= 0) {
+            return false;
+        }
+        JsonNode payload = parse(objectMapper, event.payload());
+        if (payload == null || !payload.hasNonNull("dedup_key")
+                || payload.get("dedup_key").asText().isBlank()) {
+            return false;
+        }
+        String dedupKey = payload.get("dedup_key").asText();
+        // shortcut: occurred_at 与 since 按同格式 ISO 字符串做字典序比较，跨亚秒精度边界可能偏差，同源写入下可接受
+        String since = OffsetDateTime.ofInstant(Instant.now(clock).minusSeconds(window), clock.getZone()).toString();
+        for (String delivered : deliveryRepository
+                .findDeliveredPayloadsSince(subscription.id().intValue(), since)) {
+            JsonNode p = parse(objectMapper, delivered);
+            if (p != null && dedupKey.equals(p.path("dedup_key").asText(null))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void markFailedOnException(Subscription subscription, Event event) {

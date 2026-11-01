@@ -3,10 +3,12 @@ package com.schedular.events;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
-/** 推送重试调度池（Spring TaskScheduler）；与 Quartz 调度池独立。 */
+/** 推送重试调度池（Spring TaskScheduler）；与 Quartz 调度池独立。@Scheduled 供 DeliverySweeper 使用。 */
 @Configuration
+@EnableScheduling
 public class PushSchedulerConfig {
 
     @Bean
