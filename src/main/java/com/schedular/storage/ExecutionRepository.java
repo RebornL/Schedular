@@ -101,13 +101,16 @@ public class ExecutionRepository {
                 Execution.STATUS_FAILED, lastError, finishedAt, executionId);
     }
 
-    /** 超时兜底扫描：RUNNING 且 started_at + timeout_seconds 已过期（04 状态机回调超时分支）。 */
-    public List<Execution> findTimeoutRunning(String now) {
+    /**
+     * 超时兜底扫描（跨方言，禁用 SQLite 专属 julianday）：SQL 只按 status='RUNNING' 与
+     * started_at 粗过滤（cutoff = now-1s，UTC 字符串比较），timeout_seconds 的精确过期判定在
+     * Java 侧由 sweeper 结合任务定义完成——RUNNING 行数量级小，v1 可接受。
+     */
+    public List<Execution> findTimeoutRunning(String cutoff) {
         return jdbc.query("""
-                SELECT e.* FROM executions e JOIN tasks t ON e.task_id = t.task_id
-                WHERE e.status = ? AND e.started_at IS NOT NULL
-                  AND julianday(e.started_at) + t.timeout_seconds / 86400.0 < julianday(?)""",
-                MAPPER, Execution.STATUS_RUNNING, now);
+                SELECT * FROM executions
+                WHERE status = ? AND started_at IS NOT NULL AND started_at <= ?""",
+                MAPPER, Execution.STATUS_RUNNING, cutoff);
     }
 
     /** 超时终局原子落库：仅 RUNNING 行生效（与回调竞态只有一方成功），返回影响行数。 */

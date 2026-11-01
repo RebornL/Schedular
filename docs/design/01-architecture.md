@@ -63,4 +63,4 @@ Spring Boot 版本固定 3.4.5。**禁止额外引入**：JPA、Lombok（手写�
 - 所有 SQL 只经 storage 包的 repository 发出；业务代码不得持有 JdbcTemplate。
 - HMAC webhook 签名统一经 `security/HmacSigner`（当前由 events/EventPusher 调用，签名串 `<timestamp>.<rawBody>`）。
 - 没有任何物理 DELETE（spec：记录永不删除）；停用/穷尽都是状态推进。
-- 时钟统一注入 `Clock` Bean（测试可替换）；时间戳格式 `yyyy-MM-dd'T'HH:mm:ssXXX`（ISO-8601 带时区偏移）。
+- 时钟统一注入 `Clock` Bean（测试可替换），且 **Clock 固定 UTC**——持久化时间戳一律为 UTC ISO-8601（`Z` 结尾），字符串字典序比较（事件 since、超时扫描、dedup 窗口）跨方言（SQLite/MySQL）成立；对外展示/排期仍按任务时区。时间戳格式 `yyyy-MM-dd'T'HH:mm:ssXXX`（ISO-8601 带时区偏移）。

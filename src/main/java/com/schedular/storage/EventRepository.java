@@ -57,7 +57,9 @@ public class EventRepository {
 
     /**
      * GET /api/events 兜底查询：租户强制过滤 + 可选 task_id / event_type / since / limit。
-     * min_severity 语义与订阅匹配一致：仅约束 BUSINESS_EVENT（生命周期事件一律放行），rank 见 03。
+     * occurred_at 与 since 均为 UTC ISO 字符串（Clock UTC 落库），since 由调用方归一化为 Instant 格式，
+     * 字符串比较即可跨方言（SQLite/MySQL）成立。min_severity 语义与订阅匹配一致，
+     * 仅约束 BUSINESS_EVENT（生命周期事件一律放行），rank 见 03。
      */
     public List<Event> search(String tenantId, String taskId, String eventType,
                               Integer minSeverityRank, String sinceIso, int limit) {
@@ -65,7 +67,7 @@ public class EventRepository {
                 SELECT * FROM events WHERE tenant_id = ?
                   AND (? IS NULL OR task_id = ?)
                   AND (? IS NULL OR event_type = ?)
-                  AND (? IS NULL OR julianday(occurred_at) >= julianday(?))
+                  AND (? IS NULL OR occurred_at >= ?)
                   AND (? IS NULL OR event_type <> 'BUSINESS_EVENT'
                        OR (severity IS NOT NULL AND CASE severity
                             WHEN 'LOW' THEN 0 WHEN 'MEDIUM' THEN 1

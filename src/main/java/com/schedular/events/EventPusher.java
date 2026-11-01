@@ -155,7 +155,7 @@ public class EventPusher implements EventSink {
             return false;
         }
         String dedupKey = payload.get("dedup_key").asText();
-        // shortcut: occurred_at 与 since 按同格式 ISO 字符串做字典序比较，跨亚秒精度边界可能偏差，同源写入下可接受
+        // shortcut: occurred_at 与 since 均为 Clock UTC 落库的 ISO Z 字符串，字典序比较成立；跨方言可用
         String since = OffsetDateTime.ofInstant(Instant.now(clock).minusSeconds(window), clock.getZone()).toString();
         for (String delivered : deliveryRepository
                 .findDeliveredPayloadsSince(subscription.id().intValue(), since)) {

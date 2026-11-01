@@ -325,6 +325,14 @@ class DedupQuerySemanticsTest {
         assertThat(sinceAfter).hasSize(1);
         assertThat(sinceAfter.get(0).path("event_id").asText()).isEqualTo(e4.eventId());
 
+        // since 带非零偏移（+08:00）：服务端归一化为 UTC Instant 后过滤正确
+        String plusOffset = java.time.OffsetDateTime.parse(since)
+                .toInstant().atOffset(java.time.ZoneOffset.ofHours(8)).toString();
+        JsonNode sincePlus8 = getEvents(CALLER_QUERY,
+                "?since=" + java.net.URLEncoder.encode(plusOffset, java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(sincePlus8).hasSize(1);
+        assertThat(sincePlus8.get(0).path("event_id").asText()).isEqualTo(e4.eventId());
+
         // limit
         assertThat(getEvents(CALLER_QUERY, "?limit=2")).hasSize(2);
 

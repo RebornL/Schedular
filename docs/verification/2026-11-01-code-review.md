@@ -27,14 +27,26 @@
 | D3 | 文档 | HmacSigner 归位现状 | 已修：01-architecture.md security 节与依赖不变量注明；顺带补 ExecutionTimeoutSweeper 与新配置键 | 01-architecture.md |
 | (b)1 | 备案 | ESCALATED ≥3 每次失败重发 | 不修：04 设计文档明确为有意行为（重复告警由订阅 dedup_window 压制） | — |
 | (a)2 | 备案 | owner_user_id 不按认证身份校验 | 不修：05 已记录 v1 限制（平台无法验证用户级归属，记录声明值 + caller_name 审计）；api_keys 无 owner 绑定属结构性缺口，留待 v1.1 | — |
-| (c)2 | 备案 | 去重窗口 ISO 字符串字典序比较 | 不修：代码已带 shortcut 注释；同源写入下格式一致，跨时区混存有一秒级亚秒偏差风险，v1 接受 | — |
+| (c)2 | 复审已修 | 去重窗口 ISO 字符串字典序比较 | 已修（复审追加）：Clock 固定 UTC、since 归一化 Instant，字典序比较完全成立，撤销原备案 | ClockConfig、EventRepository、EventQueryController |
 
 ## 三、备案两条（理由）
 
 1. **owner_user_id 不按认证身份校验**：docs/design/05 已记录 v1 限制——平台无法验证用户级归属，记录声明值 + caller_name 审计；api_keys 表无 owner 绑定属结构性缺口，留待 v1.1。
-2. **去重窗口 ISO 字符串字典序比较**：代码已带 shortcut 注释；同源写入下时间戳格式一致，比较结果正确；跨时区混存存在一秒级亚秒偏差风险，v1 接受。
+2. ~~去重窗口 ISO 字符串字典序比较~~：复审阶段已随 MySQL 方言修复撤销（Clock 固定 UTC + since 归一化，见下"五、复审追加"）。
 
 ## 四、复验结果
 
-- 全量 `mvn -B test`：**Tests run: 69, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS**（既有 65 例全绿 + 新增 4 例）。
+- 全量 `mvn -B test`：**Tests run: 69, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS**（既有 65 例全绿 + 新增 4 例，另在 DedupQuerySemanticsTest 补 +08:00 偏移 since 查询断言）。
 - 新增测试：TenantScopeApiTest（3 例：ADMIN 无参 400 / ADMIN 带 tenant 只见该租户 / CALLER 他人 tenant 403）、ExecutionTimeoutSweeperTest（1 例：ack 后不回调 → TIMEOUT 落库 + EXECUTION_TIMEOUT 事件 + 槽位释放）。
+
+## 五、复审追加（MySQL 方言修复）
+
+复审发现首轮修复引入/沿留方言炸弹：`EventRepository.search` 与 `ExecutionRepository.findTimeoutRunning` 用 SQLite 专属 `julianday`，MySQL prod profile 必然报错。处置（commit 追加）：
+
+1. `ClockConfig` 改为 `Clock.systemUTC()`：落库时间戳一律 UTC ISO `Z` 字符串，字典序比较完全成立（同步撤销 (c)2 备案）。
+2. `EventRepository.search`：`julianday` 比较改字符串比较 `occurred_at >= ?`；`EventQueryController` 将 since 归一化为 `OffsetDateTime.parse(since).toInstant().toString()`（恒 Z 结尾，任意偏移入参正确）。
+3. `ExecutionRepository.findTimeoutRunning`：SQL 只做 `status='RUNNING' AND started_at <= cutoff(now-1s)` 粗过滤，timeout_seconds 精确判定移至 sweeper Java 侧（RUNNING 行数量级小，v1 取舍已注明 javadoc）。
+4. 仓库内无第三处 `julianday`/`strftime`（grep 确认，含首轮新增 SQL）。
+5. 新增测试：DedupQuerySemanticsTest 补 `?since=` 带 `+08:00` 偏移入参查询正确一例；01-architecture 补"Clock 固定 UTC / 持久化时间戳一律 UTC"不变量。
+
+复验：全量 `mvn -B test` **Tests run: 69, Failures: 0, Errors: 0 — BUILD SUCCESS**。

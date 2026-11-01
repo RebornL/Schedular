@@ -10,6 +10,7 @@ public class ClockConfig {
 
     @Bean
     public Clock clock() {
-        return Clock.systemDefaultZone();
+        // 持久化时间戳一律 UTC（ISO Z 结尾），保证字符串字典序比较（since/超时/去重）跨方言正确
+        return Clock.systemUTC();
     }
 }

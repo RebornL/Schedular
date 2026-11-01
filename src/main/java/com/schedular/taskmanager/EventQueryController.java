@@ -54,7 +54,8 @@ public class EventQueryController {
         String sinceIso = null;
         if (since != null && !since.isBlank()) {
             try {
-                sinceIso = OffsetDateTime.parse(since).toString();
+                // 归一化为 UTC Instant（恒 Z 结尾），与落库 occurred_at 字典序可比
+                sinceIso = OffsetDateTime.parse(since).toInstant().toString();
             } catch (DateTimeParseException e) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_SINCE",
                         "since 必须是合法的 ISO-8601 时间");
