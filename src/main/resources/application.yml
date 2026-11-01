@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: schedular
+  profiles:
+    default: local
+  jackson:
+    default-property-inclusion: non_null
+
+schedular:
+  ack-timeout-seconds: 30
+  misfire-threshold-seconds: 60
+  push:
+    retry-delays: 30s,5m,30m
+    sweeper-interval: 30s
+  escalation:
+    threshold: 3
+  dispatch:
+    threads: 8

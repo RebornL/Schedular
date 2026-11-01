@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: ${SCHEDULAR_DB_URL}
+    username: ${SCHEDULAR_DB_USER}
+    password: ${SCHEDULAR_DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/mysql
+  quartz:
+    auto-startup: true
+    job-store-type: jdbc
+    properties:
+      org.quartz.scheduler.instanceName: schedular-prod
+      org.quartz.jobStore.isClustered: true
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate
+      org.quartz.jobStore.tablePrefix: QRTZ_

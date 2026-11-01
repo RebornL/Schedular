@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:file:schedular-test?mode=memory&cache=shared
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      # SQLite 共享内存库：单连接保活，内存数据不随连接归还丢失
+      maximum-pool-size: 1
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/sqlite
+  quartz:
+    auto-startup: false

@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:./schedular-local.db
+    driver-class-name: org.sqlite.JDBC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/sqlite
+  quartz:
+    auto-startup: true
+    job-store-type: memory
+    properties:
+      org.quartz.scheduler.instanceName: schedular-local
