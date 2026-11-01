@@ -83,6 +83,13 @@ public class TaskRepository {
                 status, updatedAt, taskId);
     }
 
+    /** 连续失败计数推进（清零或递增），单独列更新避免覆盖并发配置修改。 */
+    public int updateConsecutiveFailures(String taskId, int count, String updatedAt) {
+        return jdbc.update(
+                "UPDATE tasks SET consecutive_failures = ?, updated_at = ? WHERE task_id = ?",
+                count, updatedAt, taskId);
+    }
+
     /** 全量更新配置列（不含 status/consecutive_failures/created_at），current_version 由调用方计算。 */
     public int update(Task task) {
         return jdbc.update("""

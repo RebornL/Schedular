@@ -3,12 +3,14 @@ package com.schedular.taskmanager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedular.events.EventService;
+import com.schedular.scheduler.EscalationProperties;
 import com.schedular.scheduler.RetryScheduler;
 import com.schedular.storage.Agent;
 import com.schedular.storage.AgentRepository;
 import com.schedular.storage.Execution;
 import com.schedular.storage.ExecutionRepository;
 import com.schedular.storage.Task;
+import com.schedular.storage.TaskRepository;
 import com.schedular.triggerclient.AgentExecutionResult;
 import com.schedular.triggerclient.AgentTriggerClient;
 import com.schedular.triggerclient.TriggerOutcome;
@@ -37,6 +39,8 @@ public class ExecutionService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final RetryScheduler retryScheduler;
+    private final TaskRepository taskRepository;
+    private final EscalationProperties escalationProperties;
 
     public ExecutionService(ExecutionRepository executionRepository,
                             AgentRepository agentRepository,
@@ -44,7 +48,9 @@ public class ExecutionService {
                             EventService eventService,
                             ObjectMapper objectMapper,
                             Clock clock,
-                            RetryScheduler retryScheduler) {
+                            RetryScheduler retryScheduler,
+                            TaskRepository taskRepository,
+                            EscalationProperties escalationProperties) {
         this.executionRepository = executionRepository;
         this.agentRepository = agentRepository;
         this.triggerClient = triggerClient;
@@ -52,6 +58,8 @@ public class ExecutionService {
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.retryScheduler = retryScheduler;
+        this.taskRepository = taskRepository;
+        this.escalationProperties = escalationProperties;
     }
 
     /** Quartz 到点入口：建 Execution 行并立即触发；任何链路异常只记录，不上抛。 */
@@ -122,6 +130,7 @@ public class ExecutionService {
         log.warn("链路重试终局: execution_id={}, {}", execution.executionId(), reason);
         executionRepository.finalizeFailed(execution.executionId(), reason, nowIso());
         emitLifecycleEvent(task, execution, Execution.STATUS_FAILED, reason);
+        recordConsecutiveFailures(task, execution, Execution.STATUS_FAILED, reason);
     }
 
     /** 2xx + AgentExecutionResult（sync 响应与 EVENT_CALLBACK 回调共用）：业务 SUCCEEDED/FAILED 均为终态，FAILED 不重试。 */
@@ -137,6 +146,7 @@ public class ExecutionService {
         executionRepository.finalizeTerminal(execution.executionId(), status, resultJson,
                 result.summary(), nowIso());
         emitLifecycleEvent(task, execution, status, result.summary());
+        recordConsecutiveFailures(task, execution, status, result.summary());
         emitBusinessEvents(task, execution, result);
     }
 
@@ -145,6 +155,30 @@ public class ExecutionService {
         executionRepository.finalizeTerminal(execution.executionId(), status, resultJson,
                 summary, nowIso());
         emitLifecycleEvent(task, execution, status, summary);
+        recordConsecutiveFailures(task, execution, status, summary);
+    }
+
+    /**
+     * 连续失败升级（docs/design/04）：SUCCEEDED 清零；FAILED/TIMEOUT 递增，
+     * 计数 ≥ 阈值的每次失败都记 ESCALATED 事件并进入正常订阅推送。
+     * 不改变任务 status。v1 单实例：读取-写入非严格原子可接受。
+     */
+    private void recordConsecutiveFailures(Task task, Execution execution, String status,
+                                           String summary) {
+        if (Execution.STATUS_SUCCEEDED.equals(status)) {
+            taskRepository.updateConsecutiveFailures(task.taskId(), 0, nowIso());
+            return;
+        }
+        int count = taskRepository.findById(task.taskId())
+                .map(Task::consecutiveFailures).orElse(0) + 1;
+        taskRepository.updateConsecutiveFailures(task.taskId(), count, nowIso());
+        if (count >= escalationProperties.threshold()) {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("consecutive_failures", count);
+            payload.put("summary", summary == null ? status : summary);
+            eventService.persist("ESCALATED", task.tenantId(), task.taskId(),
+                    execution.executionId(), null, payload);
+        }
     }
 
     private void emitLifecycleEvent(Task task, Execution execution, String status, String summary) {
