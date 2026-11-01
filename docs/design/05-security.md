@@ -26,7 +26,8 @@ ScheduledTaskCreateRequest.security 声明的 tenant_id / owner_user_id：tenant
 ## callback_token
 
 - EVENT_CALLBACK 模式：触发前生成 32 字节随机 hex，存 executions.callback_token 并随 AgentTriggerRequest 下发。
-- 校验：常量时间比较；首次有效回调后 token 置空（一次性）；后续回调因 token 失效返回 403——**与幂等重复回调的语义衔接**：若同 execution_id 已有结果且 token 已清空，为避免订阅方侧重试风暴，返回 403 即可（Agent 不应重复回调；Agent 侧重试只在未收到 2xx 时发生，首次已 200）。
+- 校验：常量时间比较；缺失/错误 → 403 `INVALID_CALLBACK_TOKEN`。
+- 重复回调：token 仍有效（Execution 未终态）时，同 execution_id 重复回调幂等返回 200、不产生新事件（首次生效）；Execution 已 TIMEOUT 终态后回调 → 409 `EXECUTION_ALREADY_TERMINATED`（TIMEOUT 赢）。
 
 ## 已知限制（v1 记录在案）
 
