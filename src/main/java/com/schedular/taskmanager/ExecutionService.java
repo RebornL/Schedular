@@ -102,7 +102,7 @@ public class ExecutionService {
             case ACK -> log.info("受理回执有效，等待回调: execution_id={}", execution.executionId());
             case RESULT -> handleAgentResult(execution, task, outcome.result());
             case TIMEOUT -> finalizeTerminal(execution, task, Execution.STATUS_TIMEOUT,
-                    null, "执行超时: " + outcome.error());
+                    null, "执行超时: " + outcome.error(), "执行超时: " + outcome.error());
             case LINK_FAILURE -> {
                 log.warn("链路故障: execution_id={}, error={}", execution.executionId(), outcome.error());
                 handleLinkFailure(execution, task, outcome.error());
@@ -144,16 +144,16 @@ public class ExecutionService {
             throw new IllegalStateException("AgentExecutionResult 序列化失败", e);
         }
         executionRepository.finalizeTerminal(execution.executionId(), status, resultJson,
-                result.summary(), nowIso());
+                result.summary(), null, nowIso());
         emitLifecycleEvent(task, execution, status, result.summary());
         recordConsecutiveFailures(task, execution, status, result.summary());
         emitBusinessEvents(task, execution, result);
     }
 
     private void finalizeTerminal(Execution execution, Task task, String status,
-                                  String resultJson, String summary) {
+                                  String resultJson, String summary, String lastError) {
         executionRepository.finalizeTerminal(execution.executionId(), status, resultJson,
-                summary, nowIso());
+                summary, lastError, nowIso());
         emitLifecycleEvent(task, execution, status, summary);
         recordConsecutiveFailures(task, execution, status, summary);
     }

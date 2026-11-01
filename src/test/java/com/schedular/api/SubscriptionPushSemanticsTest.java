@@ -129,6 +129,27 @@ class SubscriptionPushSemanticsTest {
     private com.schedular.storage.Event publish(String eventType, String tenantId, String taskId,
                                                 String executionId, String severity,
                                                 Map<String, Object> payload) {
+        // 一致性检查（#12）要求事件引用的执行真实存在且状态与事件类型一致：为合成事件补支撑行
+        String execStatus = switch (eventType) {
+            case "EXECUTION_SUCCEEDED" -> "SUCCEEDED";
+            case "EXECUTION_FAILED" -> "FAILED";
+            case "EXECUTION_TIMEOUT" -> "TIMEOUT";
+            default -> "PENDING";
+        };
+        jdbc.update("""
+                INSERT INTO task_config_versions (task_id, version, definition, created_at)
+                VALUES (?, 1, NULL, '2026-01-01T00:00:00+08:00')
+                ON CONFLICT(task_id, version) DO NOTHING""", taskId);
+        jdbc.update("""
+                INSERT INTO executions (execution_id, task_id, config_version, trigger_type,
+                                        scheduled_fire_time, attempt, status, result, last_error,
+                                        created_at)
+                VALUES (?, ?, 1, 'SCHEDULED', NULL, 1, ?,
+                        ?, ?, '2026-01-01T00:00:00+08:00')
+                ON CONFLICT(execution_id) DO NOTHING""",
+                executionId, taskId, execStatus,
+                "SUCCEEDED".equals(execStatus) ? "{\"fixture\":true}" : null,
+                "SUCCEEDED".equals(execStatus) ? null : "fixture");
         return eventService.persist(eventType, tenantId, taskId, executionId, severity, payload);
     }
 

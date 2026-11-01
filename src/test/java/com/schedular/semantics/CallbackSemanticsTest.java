@@ -285,6 +285,10 @@ class CallbackSemanticsTest {
     void PENDING状态回调返回409() {
         String executionId = "E_pending_" + SEQ.incrementAndGet();
         String token = "tok_pending_" + SEQ.incrementAndGet();
+        jdbc.update("INSERT INTO task_config_versions (task_id, version, definition, created_at) "
+                        + "VALUES (?, 1, NULL, '2026-11-01T20:59:00+08:00') "
+                        + "ON CONFLICT(task_id, version) DO NOTHING",
+                "task_nonexistent_callback_test");
         jdbc.update("""
                 INSERT INTO executions (execution_id, task_id, config_version, trigger_type,
                                         scheduled_fire_time, attempt, status, result, summary,

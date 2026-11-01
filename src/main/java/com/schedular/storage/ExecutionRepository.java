@@ -63,11 +63,12 @@ public class ExecutionRepository {
 
     /** 终态落库：result JSON、summary、finished_at 一起写入。 */
     public void finalizeTerminal(String executionId, String status, String resultJson,
-                                 String summary, String finishedAt) {
+                                 String summary, String lastError, String finishedAt) {
         jdbc.update("""
-                UPDATE executions SET status = ?, result = ?, summary = ?, finished_at = ?
+                UPDATE executions SET status = ?, result = ?, summary = ?,
+                                      last_error = COALESCE(?, last_error), finished_at = ?
                 WHERE execution_id = ?""",
-                status, resultJson, summary, finishedAt, executionId);
+                status, resultJson, summary, lastError, finishedAt, executionId);
     }
 
     /** 链路故障：状态回到 PENDING（保持可重试语义），记录 last_error。 */
