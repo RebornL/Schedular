@@ -151,11 +151,11 @@ class EscalationSemanticsTest {
 
     private void registerAgent(String agentId, String scenario) {
         ResponseEntity<String> resp = exchange("POST", "/api/agents", ADMIN_KEY, Map.of(
-                "agentId", agentId,
-                "agentVersion", "1.0.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "http://localhost:" + port + "/stub/agent/" + scenario,
-                "resultMode", "SYNC"));
+                "agent_id", agentId,
+                "agent_version", "1.0.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "http://localhost:" + port + "/stub/agent/" + scenario,
+                "result_mode", "SYNC"));
         assertThat(resp.getStatusCode().is2xxSuccessful()).isTrue();
     }
 

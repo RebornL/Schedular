@@ -78,11 +78,11 @@ class ExecutionTimeoutSweeperTest {
     @Test
     void 超时兜底落TIMEOUT发事件并释放槽位() {
         exchange("POST", "/api/agents", ADMIN_KEY, Map.of(
-                "agentId", "agent_ack_silent_" + SEQ.incrementAndGet(),
-                "agentVersion", "1.0.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "http://localhost:" + port + "/stub/agent/ack-silent",
-                "resultMode", "EVENT_CALLBACK"));
+                "agent_id", "agent_ack_silent_" + SEQ.incrementAndGet(),
+                "agent_version", "1.0.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "http://localhost:" + port + "/stub/agent/ack-silent",
+                "result_mode", "EVENT_CALLBACK"));
         String agentId = "agent_ack_silent_" + SEQ.get();
         String body = exchange("POST", "/api/tasks", CALLER_KEY, Map.of(
                 "task", Map.of("name", "超时兜底任务", "task_type", "AGENT_SCHEDULED_EXECUTION"),

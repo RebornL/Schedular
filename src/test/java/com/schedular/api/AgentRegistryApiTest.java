@@ -45,11 +45,11 @@ class AgentRegistryApiTest {
 
     private Map<String, Object> validAgent(String agentId) {
         return Map.of(
-                "agentId", agentId,
-                "agentVersion", "1.0.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "https://agent.example.com/invoke",
-                "resultMode", "SYNC",
+                "agent_id", agentId,
+                "agent_version", "1.0.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "https://agent.example.com/invoke",
+                "result_mode", "SYNC",
                 "authHeaders", Map.of("X-Internal-Token", "secret-token"));
     }
 
@@ -68,10 +68,10 @@ class AgentRegistryApiTest {
         assertThat(list.getBody()).contains(agentId);
 
         Map<String, Object> updated = Map.of(
-                "agentVersion", "1.1.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "https://agent.example.com/v2",
-                "resultMode", "EVENT_CALLBACK");
+                "agent_version", "1.1.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "https://agent.example.com/v2",
+                "result_mode", "EVENT_CALLBACK");
         ResponseEntity<String> put = exchange("PUT", "/api/agents/" + agentId, ADMIN_KEY, updated);
         assertThat(put.getStatusCode().value()).isEqualTo(200);
         assertThat(put.getBody()).contains("1.1.0").contains("EVENT_CALLBACK").contains("/v2");
@@ -99,10 +99,10 @@ class AgentRegistryApiTest {
     @Test
     void 非法resultMode返回400() {
         Map<String, Object> bad = Map.of(
-                "agentId", "agent_bad_mode",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "https://agent.example.com/invoke",
-                "resultMode", "ASYNC");
+                "agent_id", "agent_bad_mode",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "https://agent.example.com/invoke",
+                "result_mode", "ASYNC");
         ResponseEntity<String> resp = exchange("POST", "/api/agents", ADMIN_KEY, bad);
         assertThat(resp.getStatusCode().value()).isEqualTo(400);
         assertThat(resp.getBody()).contains("INVALID_RESULT_MODE");
@@ -111,18 +111,18 @@ class AgentRegistryApiTest {
     @Test
     void 非法triggerType与非法endpointUrl返回400() {
         Map<String, Object> badTrigger = Map.of(
-                "agentId", "agent_bad_trigger",
-                "triggerType", "WEBHOOK",
-                "endpointUrl", "https://agent.example.com/invoke",
-                "resultMode", "SYNC");
+                "agent_id", "agent_bad_trigger",
+                "trigger_type", "WEBHOOK",
+                "endpoint_url", "https://agent.example.com/invoke",
+                "result_mode", "SYNC");
         assertThat(exchange("POST", "/api/agents", ADMIN_KEY, badTrigger).getBody())
                 .contains("INVALID_TRIGGER_TYPE");
 
         Map<String, Object> badUrl = Map.of(
-                "agentId", "agent_bad_url",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "not-a-url",
-                "resultMode", "SYNC");
+                "agent_id", "agent_bad_url",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "not-a-url",
+                "result_mode", "SYNC");
         assertThat(exchange("POST", "/api/agents", ADMIN_KEY, badUrl).getBody())
                 .contains("INVALID_ENDPOINT_URL");
     }

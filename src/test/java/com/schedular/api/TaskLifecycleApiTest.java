@@ -51,11 +51,11 @@ class TaskLifecycleApiTest {
     /** 经 ADMIN API 注册 agent（两缝互喂约定：不直插业务数据）。 */
     private void registerAgent(String agentId) {
         exchange("POST", "/api/agents", ADMIN_KEY, Map.of(
-                "agentId", agentId,
-                "agentVersion", "1.0.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "https://agent.example.com/invoke",
-                "resultMode", "SYNC"));
+                "agent_id", agentId,
+                "agent_version", "1.0.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "https://agent.example.com/invoke",
+                "result_mode", "SYNC"));
     }
 
     private Map<String, Object> validTask(String name, String cron) {

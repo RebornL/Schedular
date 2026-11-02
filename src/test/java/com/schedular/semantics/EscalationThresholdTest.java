@@ -81,11 +81,11 @@ class EscalationThresholdTest {
 
         EscalationSemanticsTest.STUB_COUNTERS.put("esc-always-fail", new AtomicInteger());
         ResponseEntity<String> agentResp = exchange("POST", "/api/agents", ADMIN_KEY, Map.of(
-                "agentId", "agent_t11_t2",
-                "agentVersion", "1.0.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "http://localhost:1/unreachable",
-                "resultMode", "SYNC"));
+                "agent_id", "agent_t11_t2",
+                "agent_version", "1.0.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "http://localhost:1/unreachable",
+                "result_mode", "SYNC"));
         assertThat(agentResp.getStatusCode().is2xxSuccessful()).isTrue();
         ResponseEntity<String> taskResp = exchange("POST", "/api/tasks", CALLER_KEY, Map.of(
                 "task", Map.of("name", "阈值2测试", "task_type", "AGENT_SCHEDULED_EXECUTION"),

@@ -59,11 +59,11 @@ class TenantScopeApiTest {
     @BeforeAll
     void setUp() {
         rest.exchange("/api/agents", HttpMethod.POST, new HttpEntity<>(Map.of(
-                "agentId", "agent_tenant_scope",
-                "agentVersion", "1.0.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "https://agent.example.com/invoke",
-                "resultMode", "SYNC"), headers(ADMIN_KEY)), String.class);
+                "agent_id", "agent_tenant_scope",
+                "agent_version", "1.0.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "https://agent.example.com/invoke",
+                "result_mode", "SYNC"), headers(ADMIN_KEY)), String.class);
         String body = exchange("POST", "/api/tasks", CALLER_KEY, Map.of(
                 "task", Map.of("name", "租户口径任务", "task_type", "AGENT_SCHEDULED_EXECUTION"),
                 "target", Map.of("agent_id", "agent_tenant_scope", "trigger_type", "HTTP_API"),

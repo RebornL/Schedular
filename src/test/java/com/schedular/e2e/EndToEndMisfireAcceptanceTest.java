@@ -81,11 +81,11 @@ class EndToEndMisfireAcceptanceTest {
     @Test
     void misfire路径阈值0时落MISFIRE事件且无execution() {
         assertThat(exchange("POST", "/api/agents", ADMIN_KEY, Map.of(
-                "agentId", "agent_e2e_misfire",
-                "agentVersion", "1.0.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", "http://localhost:1/stub/unreachable",
-                "resultMode", "SYNC")).getStatusCode().is2xxSuccessful()).isTrue();
+                "agent_id", "agent_e2e_misfire",
+                "agent_version", "1.0.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", "http://localhost:1/stub/unreachable",
+                "result_mode", "SYNC")).getStatusCode().is2xxSuccessful()).isTrue();
         ResponseEntity<String> resp = exchange("POST", "/api/tasks", CALLER_KEY, Map.of(
                 "task", Map.of("name", "e2e-misfire测试", "task_type", "AGENT_SCHEDULED_EXECUTION"),
                 "target", Map.of("agent_id", "agent_e2e_misfire", "trigger_type", "HTTP_API"),

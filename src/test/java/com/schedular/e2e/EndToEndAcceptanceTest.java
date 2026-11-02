@@ -183,11 +183,11 @@ class EndToEndAcceptanceTest {
 
     private String registerAgent(String agentId, String resultMode, String endpoint) {
         assertThat(exchange("POST", "/api/agents", ADMIN_KEY, Map.of(
-                "agentId", agentId,
-                "agentVersion", "1.0.0",
-                "triggerType", "HTTP_API",
-                "endpointUrl", endpoint,
-                "resultMode", resultMode)).getStatusCode().is2xxSuccessful()).isTrue();
+                "agent_id", agentId,
+                "agent_version", "1.0.0",
+                "trigger_type", "HTTP_API",
+                "endpoint_url", endpoint,
+                "result_mode", resultMode)).getStatusCode().is2xxSuccessful()).isTrue();
         return agentId;
     }
 
