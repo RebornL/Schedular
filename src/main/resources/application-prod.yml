@@ -12,6 +12,7 @@ spring:
     job-store-type: jdbc
     properties:
       org.quartz.scheduler.instanceName: schedular-prod
+      org.quartz.scheduler.instanceId: AUTO
       org.quartz.jobStore.isClustered: true
       org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate
       org.quartz.jobStore.tablePrefix: QRTZ_
